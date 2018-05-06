@@ -1,0 +1,11 @@
+[package]
+name = "js-bundler"
+version = "0.1.0"
+authors = ["Renée Kooi <renee@kooi.me>"]
+
+[dependencies]
+easter = "0.0.5"
+esprit = "0.0.5" # { git = "https://github.com/dherman/esprit.git" }
+node-resolve = "2.0.0"
+serde_json = "1.0"
+quicli = "0.2"
