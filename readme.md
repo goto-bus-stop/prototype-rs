@@ -13,3 +13,11 @@ git clone https://github.com/goto-bus-stop/prototype-rs.git
 cd prototype-rs
 cargo run ~/path/to/entry/point.js > output.js
 ```
+
+## TODO
+
+ - [ ] bundle node builtin modules
+ - [ ] insert-module-globals
+ - [ ] output sorted
+ - [ ] transform
+ - [ ] async
