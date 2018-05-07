@@ -1,9 +1,10 @@
 extern crate easter;
 
 use easter::stmt::{StmtListItem, Stmt};
-use easter::decl::Dtor;
+use easter::decl::{Decl, Dtor};
 use easter::expr::Expr;
 use easter::obj::PropVal;
+use easter::fun::Fun;
 use easter::id::Id;
 use easter::prog::Script;
 
@@ -36,7 +37,7 @@ impl<'a> Detective<'a> {
     fn walk_stmt_item(&mut self, item: &StmtListItem) -> () {
         match item {
             &StmtListItem::Stmt(ref stmt) => self.walk_stmt(stmt),
-            _ => (),
+            &StmtListItem::Decl(ref decl) => self.walk_decl(decl),
         }
     }
 
@@ -46,6 +47,11 @@ impl<'a> Detective<'a> {
             &Stmt::Expr(_, ref expr, _) => self.walk_expr(expr),
             _ => (),
         }
+    }
+
+    fn walk_decl(&mut self, decl: &Decl) -> () {
+        let &Decl::Fun(ref fun) = decl;
+        self.walk_fun(fun);
     }
 
     fn walk_var(&mut self, decls: &Vec<Dtor>) -> () {
@@ -102,6 +108,7 @@ impl<'a> Detective<'a> {
                     }
                 }
             },
+            &Expr::Fun(ref fun) => self.walk_fun(fun),
             &Expr::Unop(_, _, ref expr) => self.walk_expr(expr.as_ref()),
             &Expr::Binop(_, _, ref a, ref b) => {
                 self.walk_expr(a.as_ref());
@@ -122,6 +129,12 @@ impl<'a> Detective<'a> {
                 self.walk_expr(alt.as_ref());
             },
             _ => (),
+        }
+    }
+
+    fn walk_fun(&mut self, fun: &Fun) -> () {
+        for item in &fun.body {
+            self.walk_stmt_item(&item);
         }
     }
 }
@@ -153,5 +166,17 @@ mod tests {
     #[test]
     fn detects_require_in_array_and_obj() {
         assert_eq!(detect(&script("[null,whatever(),{a:require('a')},,b,require('c')]").unwrap()), vec!["a", "c"]);
+    }
+
+    #[test]
+    fn detects_require_in_fn() {
+        assert_eq!(detect(&script("
+            var a = null
+            var b = function () {
+                function c() { require('d') }
+                require('e')
+            }, c = require('f')
+            null, require('g'), void require
+        ").unwrap()), vec!["d", "e", "f", "g"]);
     }
 }
