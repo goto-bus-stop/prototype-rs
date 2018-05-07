@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::ops::Deref;
 use std::rc::Rc;
 use esprit::script;
-use node_resolve::Resolver;
+use node_resolve::{Resolver, is_core_module};
 use estree_detect_requires::detect;
 use graph::{ModuleMap, Dependencies, ModuleRecord};
 use quicli::prelude::Result; // TODO use `failure`?
@@ -57,8 +57,11 @@ impl Deps {
         let resolver = self.resolver.with_basedir(basedir);
         let mut map = Dependencies::new();
         for dep_id in dependencies {
-            let path = resolver.resolve(&dep_id)?;
-            map.insert(dep_id, path);
+            // TODO include core module shims
+            if !is_core_module(&dep_id) {
+                let path = resolver.resolve(&dep_id)?;
+                map.insert(dep_id, path);
+            }
         }
         Ok(map)
     }
