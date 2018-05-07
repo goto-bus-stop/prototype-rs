@@ -9,6 +9,7 @@ mod graph;
 mod deps;
 mod pack;
 
+use std::io::{Write, stdout};
 use quicli::prelude::*;
 use deps::Deps;
 use pack::Pack;
@@ -21,5 +22,6 @@ struct Options {
 main!(|args: Options| {
     let mut deps = Deps::new();
     deps.run(&args.entry)?;
-    println!("{}", Pack::new(&deps).to_string());
+    let mut out = stdout();
+    out.write(Pack::new(&deps).to_string().as_bytes())?;
 });
