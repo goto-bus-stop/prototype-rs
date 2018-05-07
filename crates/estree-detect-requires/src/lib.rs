@@ -7,6 +7,17 @@ use easter::id::Id;
 use easter::prog::Script;
 use walk::{Walker, Callbacks};
 
+/// Find require() calls in an ESTree Script node (from the easter crate).
+///
+/// # Examples
+///
+/// ```rust
+/// use esprit::script;
+/// use estree_detect_requires::detect;
+///
+/// let requires = detect(&script("var x = require('y')").unwrap());
+/// assert_eq!(requires, vec!["y"]);
+/// ```
 pub fn detect(ast: &Script) -> Vec<String> {
     let walker = Walker::new(ast, FindRequires::new());
     let find = walker.walk();
@@ -14,6 +25,7 @@ pub fn detect(ast: &Script) -> Vec<String> {
     find.get_modules()
 }
 
+/// A tree walker that tracks require() calls.
 struct FindRequires {
     modules: Vec<String>,
 }

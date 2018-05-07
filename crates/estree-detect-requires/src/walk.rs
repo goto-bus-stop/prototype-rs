@@ -7,36 +7,55 @@ use easter::obj::PropVal;
 use easter::fun::Fun;
 use easter::prog::Script;
 
+/// An estree (easter crate) JavaScript AST walker.
 pub struct Walker<'a, C: Callbacks> {
     ast: &'a Script,
     callbacks: C,
 }
 
+/// Holds functions to be called on different types of nodes.
+/// There are functions for preorder traversal and postorder traversal.
+/// All callbacks are optional, implementations can pick and choose which they need.
 pub trait Callbacks {
+    /// Called before a top-level Script node is entered.
     fn pre_script(&mut self, _node: &Script) -> () {}
+    /// Called before a Statement node is entered.
     fn pre_stmt(&mut self, _node: &Stmt) -> () {}
+    /// Called before an Expression node is entered.
     fn pre_expr(&mut self, _node: &Expr) -> () {}
+    /// Called before a Declaration node is entered.
     fn pre_decl(&mut self, _node: &Decl) -> () {}
+    /// Called before a Function node is entered.
     fn pre_fun(&mut self, _node: &Fun) -> () {}
-    fn pre_prop_val(&mut self, _node: &PropVal) -> () {}
+    /// Called after a top-level Script node was handled.
     fn post_script(&mut self, _node: &Script) -> () {}
+    /// Called after a Statement node was handled.
     fn post_stmt(&mut self, _node: &Stmt) -> () {}
+    /// Called after an Expression node was handled.
     fn post_expr(&mut self, _node: &Expr) -> () {}
+    /// Called after a Declaration node was handled.
     fn post_decl(&mut self, _node: &Decl) -> () {}
+    /// Called after a Function node was handled.
     fn post_fun(&mut self, _node: &Fun) -> () {}
-    fn post_prop_val(&mut self, _node: &PropVal) -> () {}
 }
 
 impl<'a, C: Callbacks> Walker<'a, C> {
+    /// Create a new Walker for a given ESTree Script, calling the
+    /// callbacks specified in `callbacks` on the relevant nodes.
     pub fn new(ast: &'a Script, callbacks: C) -> Walker<'a, C> {
         Walker { ast, callbacks }
     }
 
+    /// Do a recursive walk, calling `callbacks` where relevant.
+    /// Returns the Callbacks instance, so that custom implementations
+    /// of this trait can contain state.
+    /// Consumes the walker—create a new one to do more than one walk.
     pub fn walk(mut self) -> C {
         self.walk_script();
         self.callbacks
     }
 
+    /// Kick off the walk at the top-level Script node.
     fn walk_script(&mut self) -> () {
         self.callbacks.pre_script(&self.ast);
         for item in &self.ast.body {
@@ -45,6 +64,7 @@ impl<'a, C: Callbacks> Walker<'a, C> {
         self.callbacks.post_script(&self.ast);
     }
 
+    /// Walk an item in a list of statements, like in { blocks; }.
     fn walk_stmt_item(&mut self, item: &StmtListItem) -> () {
         match item {
             &StmtListItem::Stmt(ref stmt) => self.walk_stmt(stmt),
@@ -52,6 +72,7 @@ impl<'a, C: Callbacks> Walker<'a, C> {
         }
     }
 
+    /// Walk a statement.
     fn walk_stmt(&mut self, stmt: &Stmt) -> () {
         self.callbacks.pre_stmt(stmt);
         match stmt {
@@ -117,6 +138,7 @@ impl<'a, C: Callbacks> Walker<'a, C> {
         self.callbacks.post_stmt(stmt);
     }
 
+    /// Walk a declaration node (just `function a(){}` currently).
     fn walk_decl(&mut self, decl: &Decl) -> () {
         self.callbacks.pre_decl(decl);
         let &Decl::Fun(ref fun) = decl;
@@ -124,6 +146,7 @@ impl<'a, C: Callbacks> Walker<'a, C> {
         self.callbacks.post_decl(decl);
     }
 
+    /// Walk a var declaration.
     fn walk_var(&mut self, decls: &Vec<Dtor>) -> () {
         for decl in decls {
             match decl {
@@ -133,6 +156,7 @@ impl<'a, C: Callbacks> Walker<'a, C> {
         }
     }
 
+    /// Walk an expression node.
     fn walk_expr(&mut self, expr: &Expr) -> () {
         self.callbacks.pre_expr(expr);
         match expr {
@@ -198,6 +222,7 @@ impl<'a, C: Callbacks> Walker<'a, C> {
         self.callbacks.post_expr(expr);
     }
 
+    /// Walk a function declaration or expression node.
     fn walk_fun(&mut self, fun: &Fun) -> () {
         self.callbacks.pre_fun(fun);
         for item in &fun.body {

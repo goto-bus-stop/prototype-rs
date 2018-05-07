@@ -6,3 +6,6 @@ authors = ["Renée Kooi <renee@kooi.me>"]
 [dependencies]
 easter = "0.0.5"
 esprit = "0.0.5"
+
+[lib]
+doctest = false
