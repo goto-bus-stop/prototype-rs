@@ -1,0 +1,7 @@
+[package]
+name = "estree-detect-requires"
+version = "0.1.0"
+authors = ["Renée Kooi <renee@kooi.me>"]
+
+[dependencies]
+easter = "0.0.5"

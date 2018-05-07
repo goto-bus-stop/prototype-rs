@@ -1,8 +1,14 @@
+extern crate easter;
+
 use easter::stmt::{StmtListItem, Stmt};
 use easter::decl::Dtor;
 use easter::expr::Expr;
 use easter::id::Id;
 use easter::prog::Script;
+
+pub fn detect(ast: &Script) -> Vec<String> {
+    Detective::new(ast).detect()
+}
 
 struct Detective<'a> {
     ast: &'a Script,
@@ -45,10 +51,6 @@ impl<'a> Detective<'a> {
             }
         }
     }
-}
-
-pub fn detect(ast: &Script) -> Vec<String> {
-    Detective::new(ast).detect()
 }
 
 fn is_require_name(id: &Expr) -> bool {

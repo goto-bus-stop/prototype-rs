@@ -2,9 +2,8 @@ extern crate easter;
 extern crate esprit;
 extern crate node_resolve;
 extern crate serde_json;
+extern crate estree_detect_requires;
 #[macro_use] extern crate quicli;
-
-mod detect;
 
 use std::fs::File;
 use std::io::{Read, BufReader};
@@ -15,7 +14,7 @@ use std::rc::Rc;
 use esprit::script;
 use node_resolve::Resolver;
 use quicli::prelude::*;
-use detect::detect;
+use estree_detect_requires::detect;
 
 #[derive(Debug, StructOpt)]
 struct Options {
