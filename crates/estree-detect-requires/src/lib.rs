@@ -41,7 +41,7 @@ impl FindRequires {
 
 impl Callbacks for FindRequires {
     fn pre_expr(&mut self, expr: &Expr) -> () {
-        if let &Expr::Call(_, ref callee, ref args) = expr {
+        if let Expr::Call(_, ref callee, ref args) = *expr {
             if is_require_name(callee) {
                 if let Some(&Expr::String(_, ref val)) = args.first() {
                     self.modules.push(val.value.clone());
@@ -52,7 +52,7 @@ impl Callbacks for FindRequires {
 }
 
 fn is_require_name(id: &Expr) -> bool {
-    if let &Expr::Id(Id { name: ref fn_name, .. }) = id {
+    if let Expr::Id(Id { name: ref fn_name, .. }) = *id {
         fn_name.as_ref() == "require"
     } else {
         false
