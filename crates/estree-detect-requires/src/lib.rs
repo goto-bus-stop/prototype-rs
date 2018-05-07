@@ -3,6 +3,7 @@ extern crate easter;
 use easter::stmt::{StmtListItem, Stmt};
 use easter::decl::Dtor;
 use easter::expr::Expr;
+use easter::obj::PropVal;
 use easter::id::Id;
 use easter::prog::Script;
 
@@ -21,48 +22,106 @@ impl<'a> Detective<'a> {
     }
 
     fn detect(mut self) -> Vec<String> {
-        for item in &self.ast.body {
-            match item {
-                &StmtListItem::Stmt(ref stmt) => {
-                    self.detect_stmt(stmt);
-                },
-                _ => (),
-            }
-        }
+        self.walk_script();
 
         self.modules
     }
 
-    fn detect_stmt(&mut self, stmt: &Stmt) -> () {
-        match stmt {
-            &Stmt::Var(_, ref decls, _) => {
-                self.detect_var(decls);
-            },
-            &Stmt::Expr(_, ref expr, _) => {
-                self.detect_expr(expr);
-            },
+    fn walk_script(&mut self) -> () {
+        for item in &self.ast.body {
+            self.walk_stmt_item(item);
+        }
+    }
+
+    fn walk_stmt_item(&mut self, item: &StmtListItem) -> () {
+        match item {
+            &StmtListItem::Stmt(ref stmt) => self.walk_stmt(stmt),
             _ => (),
         }
     }
 
-    fn detect_var(&mut self, decls: &Vec<Dtor>) -> () {
+    fn walk_stmt(&mut self, stmt: &Stmt) -> () {
+        match stmt {
+            &Stmt::Var(_, ref decls, _) => self.walk_var(decls),
+            &Stmt::Expr(_, ref expr, _) => self.walk_expr(expr),
+            _ => (),
+        }
+    }
+
+    fn walk_var(&mut self, decls: &Vec<Dtor>) -> () {
         for decl in decls {
             match decl {
-                &Dtor::Simple(_, _, Some(ref expr)) => {
-                    self.detect_expr(expr);
-                },
+                &Dtor::Simple(_, _, Some(ref expr)) => self.walk_expr(expr),
                 _ => (),
             }
         }
     }
 
-    fn detect_expr(&mut self, expr: &Expr) -> () {
-        if let &Expr::Call(_, ref callee, ref args) = expr {
-            if is_require_name(callee) {
-                if let Some(&Expr::String(_, ref val)) = args.first() {
-                    self.modules.push(val.value.clone());
+    fn walk_expr(&mut self, expr: &Expr) -> () {
+        match expr {
+            // TODO move this into a callback
+            // and move the walk_* functions to generic AST walker
+            &Expr::Call(_, ref callee, ref args) => {
+                if is_require_name(callee) {
+                    if let Some(&Expr::String(_, ref val)) = args.first() {
+                        self.modules.push(val.value.clone());
+                    }
+                } else {
+                    self.walk_expr(callee);
+                    for arg in args {
+                        self.walk_expr(arg);
+                    }
+                }
+            },
+            &Expr::Seq(_, ref exprs) => {
+                for expr in exprs {
+                    self.walk_expr(expr);
                 }
             }
+            &Expr::Arr(_, ref elements) => {
+                for el in elements {
+                    if let &Some(ref node) = el {
+                        self.walk_expr(node);
+                    }
+                }
+            },
+            &Expr::Obj(_, ref properties) => {
+                for prop in properties {
+                    match &prop.val {
+                        &PropVal::Init(ref value) => self.walk_expr(value),
+                        &PropVal::Get(_, ref body) => {
+                            for item in body {
+                                self.walk_stmt_item(item);
+                            }
+                        },
+                        &PropVal::Set(_, _, ref body) => {
+                            for item in body {
+                                self.walk_stmt_item(item);
+                            }
+                        },
+                    }
+                }
+            },
+            &Expr::Unop(_, _, ref expr) => self.walk_expr(expr.as_ref()),
+            &Expr::Binop(_, _, ref a, ref b) => {
+                self.walk_expr(a.as_ref());
+                self.walk_expr(b.as_ref());
+            },
+            &Expr::Logop(_, _, ref a, ref b) => {
+                self.walk_expr(a.as_ref());
+                self.walk_expr(b.as_ref());
+            },
+            &Expr::PreInc(_, ref expr) => self.walk_expr(expr.as_ref()),
+            &Expr::PostInc(_, ref expr) => self.walk_expr(expr.as_ref()),
+            &Expr::PreDec(_, ref expr) => self.walk_expr(expr.as_ref()),
+            &Expr::PostDec(_, ref expr) => self.walk_expr(expr.as_ref()),
+            &Expr::Assign(_, _, _, ref expr) => self.walk_expr(expr.as_ref()),
+            &Expr::Cond(_, ref cond, ref cons, ref alt) => {
+                self.walk_expr(cond.as_ref());
+                self.walk_expr(cons.as_ref());
+                self.walk_expr(alt.as_ref());
+            },
+            _ => (),
         }
     }
 }
@@ -89,5 +148,10 @@ mod tests {
     #[test]
     fn detects_bare_require() {
         assert_eq!(detect(&script("require('y')").unwrap()), vec!["y"]);
+    }
+
+    #[test]
+    fn detects_require_in_array_and_obj() {
+        assert_eq!(detect(&script("[null,whatever(),{a:require('a')},,b,require('c')]").unwrap()), vec!["a", "c"]);
     }
 }
