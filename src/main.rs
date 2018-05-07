@@ -3,13 +3,15 @@ extern crate esprit;
 extern crate node_resolve;
 extern crate serde_json;
 extern crate estree_detect_requires;
+extern crate time;
 #[macro_use] extern crate quicli;
 
 mod graph;
 mod deps;
 mod pack;
 
-use std::io::{Write, stdout};
+use std::io::{Write, stdout, stderr};
+use time::PreciseTime;
 use quicli::prelude::*;
 use deps::Deps;
 use pack::Pack;
@@ -20,8 +22,13 @@ struct Options {
 }
 
 main!(|args: Options| {
+    let start = PreciseTime::now();
     let mut deps = Deps::new();
     deps.run(&args.entry)?;
     let mut out = stdout();
-    out.write_all(Pack::new(&deps).to_string().as_bytes())?;
+    let bundle = Pack::new(&deps).to_string();
+    let size = bundle.len();
+    out.write_all(bundle.as_bytes())?;
+    let end = PreciseTime::now();
+    stderr().write_all(format!("wrote {} bytes, took {}ms\n", size, start.to(end).num_milliseconds()).as_bytes())?;
 });

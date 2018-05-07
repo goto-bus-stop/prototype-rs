@@ -11,4 +11,5 @@ esprit = "0.0.5" # { git = "https://github.com/dherman/esprit.git" }
 estree-detect-requires = { path = "crates/estree-detect-requires" }
 node-resolve = "2.0.0"
 serde_json = "1.0"
+time = "0.1"
 quicli = "0.2"
