@@ -10,6 +10,7 @@ pub type Dependencies = HashMap<String, PathBuf>;
 pub struct ModuleRecord {
     pub path: Box<Path>,
     pub source: String,
+    pub entry: bool,
     pub dependencies: Dependencies,
 }
 

@@ -45,6 +45,7 @@ impl<'a> Pack<'a> {
         })()({\n");
 
         let mut first = true;
+        let mut entries = vec![];
         for record in self.modules.values() {
             if !first { string.push_str(",\n"); }
             string.push_str("\"");
@@ -55,9 +56,15 @@ impl<'a> Pack<'a> {
             string.push_str(&serde_json::to_string(&record.dependencies).unwrap());
             string.push_str("]");
             first = false;
+
+            if record.entry {
+                entries.push(path_to_string(&record.path));
+            }
         }
 
-        string.push_str("},{},[]);");
+        string.push_str("},{},");
+        string.push_str(&serde_json::to_string(&entries).unwrap());
+        string.push_str(");");
         string
     }
 }

@@ -27,7 +27,7 @@ impl Deps {
         let resolved = self.resolver.with_basedir(PathBuf::from("."))
             .resolve(&entry)?;
 
-        let record = self.read_file(resolved)?;
+        let record = self.read_file(resolved, true)?;
         let rec_path = path_to_string(&record.path);
         self.add_module(&rec_path, record);
 
@@ -35,7 +35,7 @@ impl Deps {
         Ok(())
     }
 
-    fn read_file(&mut self, path: PathBuf) -> Result<ModuleRecord> {
+    fn read_file(&mut self, path: PathBuf, is_entry: bool) -> Result<ModuleRecord> {
         let file = File::open(&path)?;
         let mut reader = BufReader::new(file);
         let mut source = String::new();
@@ -48,6 +48,7 @@ impl Deps {
         Ok(ModuleRecord {
             path: box_path,
             source,
+            entry: is_entry,
             dependencies: self.resolve_deps(basedir, dependencies)?,
         })
     }
@@ -66,7 +67,7 @@ impl Deps {
         let record = { self.module_map.get(rec_path).unwrap().to_owned() };
         for path in record.dependencies.values() {
             if !self.module_map.contains_key(&path_to_string(&path)) {
-                let new_record = self.read_file(path.clone())?;
+                let new_record = self.read_file(path.clone(), false)?;
                 let new_path = path_to_string(&new_record.path);
                 self.add_module(&new_path, new_record);
                 self.read_deps(&new_path)?;
