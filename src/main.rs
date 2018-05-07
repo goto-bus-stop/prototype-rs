@@ -23,5 +23,5 @@ main!(|args: Options| {
     let mut deps = Deps::new();
     deps.run(&args.entry)?;
     let mut out = stdout();
-    out.write(Pack::new(&deps).to_string().as_bytes())?;
+    out.write_all(Pack::new(&deps).to_string().as_bytes())?;
 });

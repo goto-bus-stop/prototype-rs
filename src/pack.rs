@@ -2,7 +2,7 @@ use std::path::Path;
 use serde_json;
 use graph::ModuleMap;
 
-/// Pack a ModuleMap into a browserify-style javascript bundle.
+/// Pack a `ModuleMap` into a browserify-style javascript bundle.
 pub struct Pack<'a> {
     modules: &'a ModuleMap,
 }

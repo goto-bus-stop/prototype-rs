@@ -25,7 +25,7 @@ impl Deps {
 
     pub fn run(&mut self, entry: &str) -> Result<()> {
         let resolved = self.resolver.with_basedir(PathBuf::from("."))
-            .resolve(&entry)?;
+            .resolve(entry)?;
 
         let record = self.read_file(resolved, true)?;
         let rec_path = path_to_string(&record.path);
@@ -66,10 +66,10 @@ impl Deps {
         Ok(map)
     }
 
-    fn read_deps(&mut self, rec_path: &String) -> Result<()> {
-        let record = { self.module_map.get(rec_path).unwrap().to_owned() };
+    fn read_deps(&mut self, rec_path: &str) -> Result<()> {
+        let record = { &self.module_map[rec_path].to_owned() };
         for path in record.dependencies.values() {
-            if !self.module_map.contains_key(&path_to_string(&path)) {
+            if !self.module_map.contains_key(&path_to_string(path)) {
                 let new_record = self.read_file(path.clone(), false)?;
                 let new_path = path_to_string(&new_record.path);
                 self.add_module(&new_path, new_record);
@@ -79,8 +79,8 @@ impl Deps {
         Ok(())
     }
 
-    fn add_module(&mut self, rec_path: &String, record: ModuleRecord) -> () {
-        self.module_map.insert(rec_path.clone(), Rc::new(record));
+    fn add_module(&mut self, rec_path: &str, record: ModuleRecord) -> () {
+        self.module_map.insert(rec_path.to_string(), Rc::new(record));
     }
 }
 
