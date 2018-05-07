@@ -70,7 +70,7 @@ impl Deps {
         reader.read_to_string(&mut source)?;
 
         let ast = script(&source).unwrap();
-        let dependencies = detect(ast);
+        let dependencies = detect(&ast);
         let box_path = path.into_boxed_path();
         let basedir = box_path.parent().unwrap().to_path_buf();
         Ok(ModuleRecord {
