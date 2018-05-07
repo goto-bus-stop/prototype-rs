@@ -43,8 +43,63 @@ impl<'a> Detective<'a> {
 
     fn walk_stmt(&mut self, stmt: &Stmt) -> () {
         match stmt {
+            &Stmt::Block(_, ref items) => {
+                for item in items {
+                    self.walk_stmt_item(item);
+                }
+            },
             &Stmt::Var(_, ref decls, _) => self.walk_var(decls),
             &Stmt::Expr(_, ref expr, _) => self.walk_expr(expr),
+            &Stmt::If(_, ref cond, ref cons, ref alt) => {
+                self.walk_expr(cond);
+                self.walk_stmt(cons.as_ref());
+                if let &Some(ref node) = alt { self.walk_stmt(node.as_ref()); }
+            },
+            &Stmt::Label(_, _, ref block) => self.walk_stmt(block.as_ref()),
+            &Stmt::Switch(_, ref cond, ref cases) => {
+                self.walk_expr(cond);
+                for case in cases {
+                    if let Some(ref test) = case.test { self.walk_expr(test); }
+                    for item in &case.body {
+                        self.walk_stmt_item(item);
+                    }
+                }
+            },
+            &Stmt::Return(_, Some(ref arg), _) => self.walk_expr(arg),
+            &Stmt::Throw(_, ref arg, _) => self.walk_expr(arg),
+            &Stmt::Try(_, ref block, ref caught, ref finally) => {
+                for item in block { self.walk_stmt_item(item); }
+                if let &Some(ref caught_block) = caught {
+                    for item in &caught_block.body { self.walk_stmt_item(item); }
+                }
+                if let &Some(ref finally_block) = finally {
+                    for item in finally_block { self.walk_stmt_item(item); }
+                }
+            },
+            &Stmt::While(_, ref cond, ref body) => {
+                self.walk_expr(cond);
+                self.walk_stmt(body.as_ref());
+            },
+            &Stmt::DoWhile(_, ref body, ref cond, _) => {
+                self.walk_stmt(body.as_ref());
+                self.walk_expr(cond);
+            },
+            &Stmt::For(_, ref _init, ref cond, ref update, ref body) => {
+                // if let &Some(ref node) = head { self.walk_for_head(node); }
+                if let &Some(ref node) = cond { self.walk_expr(&node); }
+                if let &Some(ref node) = update { self.walk_expr(&node); }
+                self.walk_stmt(body.as_ref());
+            },
+            &Stmt::ForIn(_, ref _head, ref iterable, ref body) => {
+                // if let &Some(ref node) = head { self.walk_for_in_head(node); }
+                self.walk_expr(iterable);
+                self.walk_stmt(body.as_ref());
+            },
+            &Stmt::ForOf(_, ref _head, ref iterable, ref body) => {
+                // if let &Some(ref node) = head { self.walk_for_of_head(node); }
+                self.walk_expr(iterable);
+                self.walk_stmt(body.as_ref());
+            },
             _ => (),
         }
     }
