@@ -23,9 +23,8 @@ impl<'a> Detective<'a> {
     fn detect(mut self) -> Vec<String> {
         for item in &self.ast.body {
             match item {
-                // var
-                &StmtListItem::Stmt(Stmt::Var(_, ref decls, _semi)) => {
-                    self.detect_var(decls);
+                &StmtListItem::Stmt(ref stmt) => {
+                    self.detect_stmt(stmt);
                 },
                 _ => (),
             }
@@ -34,28 +33,61 @@ impl<'a> Detective<'a> {
         self.modules
     }
 
+    fn detect_stmt(&mut self, stmt: &Stmt) -> () {
+        match stmt {
+            &Stmt::Var(_, ref decls, _) => {
+                self.detect_var(decls);
+            },
+            &Stmt::Expr(_, ref expr, _) => {
+                self.detect_expr(expr);
+            },
+            _ => (),
+        }
+    }
+
     fn detect_var(&mut self, decls: &Vec<Dtor>) -> () {
         for decl in decls {
             match decl {
-                &Dtor::Simple(_, _, Some(Expr::Call(_, ref expr, ref args))) => {
-                    if is_require_name(expr) {
-                        match args.first().unwrap() {
-                            &Expr::String(_, ref val) => {
-                                self.modules.push(val.value.clone());
-                            },
-                            _ => (),
-                        }
-                    }
+                &Dtor::Simple(_, _, Some(ref expr)) => {
+                    self.detect_expr(expr);
                 },
                 _ => (),
+            }
+        }
+    }
+
+    fn detect_expr(&mut self, expr: &Expr) -> () {
+        if let &Expr::Call(_, ref callee, ref args) = expr {
+            if is_require_name(callee) {
+                if let Some(&Expr::String(_, ref val)) = args.first() {
+                    self.modules.push(val.value.clone());
+                }
             }
         }
     }
 }
 
 fn is_require_name(id: &Expr) -> bool {
-    match id {
-        &Expr::Id(Id { name: ref fn_name, .. }) => fn_name.as_ref() == "require",
-        _ => false,
+    if let &Expr::Id(Id { name: ref fn_name, .. }) = id {
+        fn_name.as_ref() == "require"
+    } else {
+        false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate esprit;
+    use self::esprit::script;
+    use ::detect;
+
+    #[test]
+    fn detects_var_require() {
+        assert_eq!(detect(&script("var x = require('y')").unwrap()), vec!["y"]);
+    }
+
+    #[test]
+    fn detects_bare_require() {
+        assert_eq!(detect(&script("require('y')").unwrap()), vec!["y"]);
     }
 }
