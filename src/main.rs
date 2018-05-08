@@ -10,7 +10,7 @@ mod graph;
 mod deps;
 mod pack;
 
-use std::io::{Write, stdout, stderr};
+use std::io::{Write, stdout};
 use time::PreciseTime;
 use quicli::prelude::*;
 use deps::Deps;
@@ -30,5 +30,5 @@ main!(|args: Options| {
     let size = bundle.len();
     out.write_all(bundle.as_bytes())?;
     let end = PreciseTime::now();
-    stderr().write_all(format!("wrote {} bytes, took {}ms\n", size, start.to(end).num_milliseconds()).as_bytes())?;
+    eprint!("wrote {} bytes, took {}ms\n", size, start.to(end).num_milliseconds());
 });

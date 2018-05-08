@@ -21,13 +21,12 @@ impl<'a> Pack<'a> {
         let mut entries = vec![];
         for record in self.modules.values() {
             if !first { string.push_str(",\n"); }
-            string.push_str("\"");
-            string.push_str(&path_to_string(&record.path));
-            string.push_str("\":[function(require,exports,module){\n");
-            string.push_str(&record.source);
-            string.push_str("\n},");
-            string.push_str(&serde_json::to_string(&record.dependencies).unwrap());
-            string.push_str("]");
+            string.push_str(&format!(
+                "{id}:[function(require,exports,module){{\n{source}\n}},{deps}]",
+                id = serde_json::to_string(path_to_string(&record.path)).unwrap(),
+                source = record.source,
+                deps = serde_json::to_string(&record.dependencies).unwrap(),
+            ));
             first = false;
 
             if record.entry {
