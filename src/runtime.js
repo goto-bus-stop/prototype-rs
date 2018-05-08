@@ -9,7 +9,7 @@
           if (!jumped && currentRequire) return currentRequire(name, true);
 
           if (previousRequire) return previousRequire(name, true);
-          var err = new Error('Cannot find module \\'' + name + '\\'');
+          var err = new Error('Cannot find module \'' + name + '\'');
           err.code = 'MODULE_NOT_FOUND';
           throw err;
         }
