@@ -3,7 +3,10 @@ use std::io::{Read, BufReader};
 use std::path::{Path, PathBuf};
 use std::ops::Deref;
 use std::rc::Rc;
+use std::fmt;
+use std::error::Error as StdError;
 use esprit::script;
+use esprit::error::Error as EspritError;
 use node_resolve::{Resolver, is_core_module};
 use estree_detect_requires::detect;
 use graph::{ModuleMap, Dependencies, ModuleRecord};
@@ -12,6 +15,70 @@ use quicli::prelude::Result; // TODO use `failure`?
 pub struct Deps {
     resolver: Resolver,
     module_map: ModuleMap,
+}
+
+#[derive(Debug)]
+struct ParseError {
+    filename: PathBuf,
+    inner: EspritError,
+}
+
+impl ParseError {
+    fn new(filename: &PathBuf, inner: EspritError) -> ParseError {
+        ParseError { filename: filename.clone(), inner }
+    }
+
+    fn into_inner(self) -> EspritError {
+        self.inner
+    }
+}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let position = match self.inner {
+            EspritError::UnexpectedToken(ref token) | EspritError::FailedASI(ref token) |
+            EspritError::IllegalBreak(ref token) | EspritError::IllegalContinue(ref token) |
+            EspritError::DuplicateDefault(ref token) | EspritError::StrictWith(ref token) |
+            EspritError::ThrowArgument(ref token) | EspritError::OrphanTry(ref token) =>
+                Some(token.location),
+            EspritError::TopLevelReturn(ref span) | EspritError::ForOfLetExpr(ref span) =>
+                Some(*span),
+            EspritError::InvalidLabel(ref id) | EspritError::InvalidLabelType(ref id) |
+            EspritError::ContextualKeyword(ref id) | EspritError::IllegalStrictBinding(ref id) =>
+                id.location,
+            EspritError::LexError(_) => None,
+            EspritError::InvalidLHS(span, _) => span,
+            EspritError::UnsupportedFeature(_) => None,
+        };
+        write!(f, "Parse error in {}:{}\n{}", path_to_string(&self.filename), match position {
+            Some(span) => format!("{}:{}", span.start.line, span.start.column),
+            None => "0:0".into(),
+        }, self.description())
+    }
+}
+
+impl StdError for ParseError {
+    fn description(&self) -> &str {
+        match self.inner {
+            EspritError::UnexpectedToken(_) => "Unexpected token",
+            EspritError::FailedASI(_) => "Failed ASI",
+            EspritError::LexError(_) => "Lex error",
+            EspritError::TopLevelReturn(_) => "Top-level return",
+            EspritError::IllegalBreak(_) => "Illegal break",
+            EspritError::IllegalContinue(_) => "Illegal continue",
+            EspritError::InvalidLabel(_) => "Invalid label",
+            EspritError::InvalidLabelType(_) => "Invalid label type",
+            EspritError::ContextualKeyword(_) => "Contextual keyboard",
+            EspritError::IllegalStrictBinding(_) => "Illegal strict binding",
+            EspritError::ForOfLetExpr(_) => "`for of` let expr",
+            EspritError::DuplicateDefault(_) => "Duplicate default",
+            EspritError::StrictWith(_) => "Strict with",
+            EspritError::ThrowArgument(_) => "Throw argument",
+            EspritError::OrphanTry(_) => "Orphan try",
+            EspritError::InvalidLHS(_, _) => "Invalid LHS",
+            EspritError::UnsupportedFeature(_) => "Unsupported feature",
+        }
+    }
 }
 
 impl Deps {
@@ -41,7 +108,7 @@ impl Deps {
         let mut source = String::new();
         reader.read_to_string(&mut source)?;
 
-        let ast = script(&source).unwrap();
+        let ast = script(&source).map_err(|err| ParseError::new(&path, err))?;
         let dependencies = detect(&ast);
         let box_path = path.into_boxed_path();
         let basedir = box_path.parent().unwrap().to_path_buf();

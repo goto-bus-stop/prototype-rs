@@ -23,7 +23,7 @@ impl<'a> Pack<'a> {
             if !first { string.push_str(",\n"); }
             string.push_str(&format!(
                 "{id}:[function(require,exports,module){{\n{source}\n}},{deps}]",
-                id = serde_json::to_string(path_to_string(&record.path)).unwrap(),
+                id = serde_json::to_string(&path_to_string(&record.path)).unwrap(),
                 source = record.source,
                 deps = serde_json::to_string(&record.dependencies).unwrap(),
             ));
