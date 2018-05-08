@@ -206,6 +206,12 @@ impl<'a, C: Callbacks> Walker<'a, C> {
                 self.walk_expr(cons.as_ref());
                 self.walk_expr(alt.as_ref());
             },
+            // a.b
+            Expr::Dot(_, ref object, ref _property) => self.walk_expr(object.as_ref()),
+            Expr::Brack(_, ref object, ref property) => {
+                self.walk_expr(object.as_ref());
+                self.walk_expr(property.as_ref());
+            },
             _ => (),
         }
         self.callbacks.post_expr(expr);

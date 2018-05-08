@@ -91,4 +91,9 @@ mod tests {
             null, require('g'), void require
         ").unwrap()), vec!["d", "e", "f", "g"]);
     }
+
+    #[test]
+    fn detects_require_in_member_expression_object() {
+        assert_eq!(detect(&script("require('util').inherits").unwrap()), vec!["util"]);
+    }
 }
