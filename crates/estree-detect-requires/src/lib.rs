@@ -2,9 +2,9 @@ extern crate easter;
 
 mod walk;
 
-use easter::expr::Expr;
+use easter::expr::{Expr, ExprListItem};
 use easter::id::Id;
-use easter::prog::Script;
+use easter::stmt::Script;
 use walk::{Walker, Callbacks};
 
 /// Find require() calls in an ESTree Script node (from the easter crate).
@@ -43,7 +43,7 @@ impl Callbacks for FindRequires {
     fn pre_expr(&mut self, expr: &Expr) -> () {
         if let Expr::Call(_, ref callee, ref args) = *expr {
             if is_require_name(callee) {
-                if let Some(&Expr::String(_, ref val)) = args.first() {
+                if let Some(&ExprListItem::Expr(Expr::String(_, ref val))) = args.first() {
                     self.modules.push(val.value.clone());
                 }
             }

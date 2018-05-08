@@ -1,11 +1,11 @@
 extern crate easter;
 
-use easter::stmt::{StmtListItem, Stmt};
+use easter::stmt::{Script, StmtListItem, Stmt};
 use easter::decl::{Decl, Dtor};
-use easter::expr::Expr;
-use easter::obj::PropVal;
+use easter::expr::{ExprListItem, Expr};
+use easter::patt::{Patt, AssignTarget};
+use easter::obj::{Prop, PropVal};
 use easter::fun::Fun;
-use easter::prog::Script;
 
 /// An estree (easter crate) JavaScript AST walker.
 pub struct Walker<'a, C: Callbacks> {
@@ -26,7 +26,7 @@ pub trait Callbacks {
     /// Called before a Declaration node is entered.
     fn pre_decl(&mut self, _node: &Decl) -> () {}
     /// Called before a Function node is entered.
-    fn pre_fun(&mut self, _node: &Fun) -> () {}
+    fn pre_fun<Id>(&mut self, _node: &Fun<Id>) -> () {}
     /// Called after a top-level Script node was handled.
     fn post_script(&mut self, _node: &Script) -> () {}
     /// Called after a Statement node was handled.
@@ -36,7 +36,7 @@ pub trait Callbacks {
     /// Called after a Declaration node was handled.
     fn post_decl(&mut self, _node: &Decl) -> () {}
     /// Called after a Function node was handled.
-    fn post_fun(&mut self, _node: &Fun) -> () {}
+    fn post_fun<Id>(&mut self, _node: &Fun<Id>) -> () {}
 }
 
 impl<'a, C: Callbacks> Walker<'a, C> {
@@ -58,7 +58,7 @@ impl<'a, C: Callbacks> Walker<'a, C> {
     /// Kick off the walk at the top-level Script node.
     fn walk_script(&mut self) -> () {
         self.callbacks.pre_script(self.ast);
-        for item in &self.ast.body {
+        for item in &self.ast.items {
             self.walk_stmt_item(item);
         }
         self.callbacks.post_script(self.ast);
@@ -76,8 +76,8 @@ impl<'a, C: Callbacks> Walker<'a, C> {
     fn walk_stmt(&mut self, stmt: &Stmt) -> () {
         self.callbacks.pre_stmt(stmt);
         match *stmt {
-            Stmt::Block(_, ref items) => {
-                for item in items {
+            Stmt::Block(ref block) => {
+                for item in &block.items {
                     self.walk_stmt_item(item);
                 }
             },
@@ -101,12 +101,12 @@ impl<'a, C: Callbacks> Walker<'a, C> {
             Stmt::Return(_, Some(ref arg), _) | Stmt::Throw(_, ref arg, _) =>
                 self.walk_expr(arg),
             Stmt::Try(_, ref block, ref caught, ref finally) => {
-                for item in block { self.walk_stmt_item(item); }
+                for item in &block.items { self.walk_stmt_item(item); }
                 if let Some(ref caught_block) = *caught {
-                    for item in &caught_block.body { self.walk_stmt_item(item); }
+                    for item in &caught_block.body.items { self.walk_stmt_item(item); }
                 }
                 if let Some(ref finally_block) = *finally {
-                    for item in finally_block { self.walk_stmt_item(item); }
+                    for item in &finally_block.items { self.walk_stmt_item(item); }
                 }
             },
             Stmt::While(_, ref cond, ref body) => {
@@ -138,20 +138,36 @@ impl<'a, C: Callbacks> Walker<'a, C> {
         self.callbacks.post_stmt(stmt);
     }
 
-    /// Walk a declaration node (just `function a(){}` currently).
+    /// Walk a declaration node (function, let, const).
     fn walk_decl(&mut self, decl: &Decl) -> () {
         self.callbacks.pre_decl(decl);
-        let Decl::Fun(ref fun) = *decl;
-        self.walk_fun(fun);
+        match *decl {
+            Decl::Fun(ref fun) => self.walk_fun(fun),
+            Decl::Let(_, ref dtors, _) => {
+                for dtor in dtors {
+                    self.walk_dtor(dtor);
+                }
+            },
+            Decl::Const(_, ref dtors, _) => {
+                for dtor in dtors {
+                    self.walk_patt(&dtor.patt);
+                    self.walk_expr(&dtor.value);
+                }
+            },
+        }
         self.callbacks.post_decl(decl);
     }
 
     /// Walk a var declaration.
     fn walk_var(&mut self, decls: &[Dtor]) -> () {
         for decl in decls {
-            if let Dtor::Simple(_, _, Some(ref expr)) = *decl {
-                self.walk_expr(expr);
-            }
+            self.walk_dtor(decl);
+        }
+    }
+
+    fn walk_dtor(&mut self, dtor: &Dtor) -> () {
+        if let Dtor::Simple(_, _, Some(ref expr)) = *dtor {
+            self.walk_expr(expr);
         }
     }
 
@@ -164,7 +180,10 @@ impl<'a, C: Callbacks> Walker<'a, C> {
             Expr::Call(_, ref callee, ref args) => {
                 self.walk_expr(callee);
                 for arg in args {
-                    self.walk_expr(arg);
+                    match *arg {
+                        ExprListItem::Expr(ref node) => self.walk_expr(node),
+                        ExprListItem::Spread(_, ref node) => self.walk_expr(node),
+                    }
                 }
             },
             Expr::Seq(_, ref exprs) => {
@@ -174,21 +193,16 @@ impl<'a, C: Callbacks> Walker<'a, C> {
             }
             Expr::Arr(_, ref elements) => {
                 for el in elements {
-                    if let Some(ref node) = *el {
-                        self.walk_expr(node);
+                    match *el {
+                        Some(ExprListItem::Expr(ref node)) => self.walk_expr(node),
+                        Some(ExprListItem::Spread(_, ref node)) => self.walk_expr(node),
+                        None => (),
                     }
                 }
             },
             Expr::Obj(_, ref properties) => {
                 for prop in properties {
-                    match prop.val {
-                        PropVal::Init(ref value) => self.walk_expr(value),
-                        PropVal::Get(_, ref body) | PropVal::Set(_, _, ref body) => {
-                            for item in body {
-                                self.walk_stmt_item(item);
-                            }
-                        },
-                    }
+                    self.walk_prop(prop);
                 }
             },
             Expr::Fun(ref fun) => self.walk_fun(fun),
@@ -196,11 +210,18 @@ impl<'a, C: Callbacks> Walker<'a, C> {
                 self.walk_expr(a.as_ref());
                 self.walk_expr(b.as_ref());
             },
-            Expr::Unop(_, _, ref expr) |
-            Expr::PreInc(_, ref expr) | Expr::PostInc(_, ref expr) |
-            Expr::PreDec(_, ref expr) | Expr::PostDec(_, ref expr) =>
-                self.walk_expr(expr.as_ref()),
-            Expr::Assign(_, _, _, ref expr) => self.walk_expr(expr.as_ref()),
+            Expr::Unop(_, _, ref expr) => self.walk_expr(expr.as_ref()),
+            Expr::PreInc(_, ref target) | Expr::PostInc(_, ref target) |
+            Expr::PreDec(_, ref target) | Expr::PostDec(_, ref target) =>
+                self.walk_assign_target(target.as_ref()),
+            Expr::Assign(_, ref target, ref expr) => {
+                self.walk_patt(target);
+                self.walk_expr(expr.as_ref());
+            },
+            Expr::BinAssign(_, _, ref target, ref expr) => {
+                self.walk_assign_target(target);
+                self.walk_expr(expr.as_ref());
+            },
             Expr::Cond(_, ref cond, ref cons, ref alt) => {
                 self.walk_expr(cond.as_ref());
                 self.walk_expr(cons.as_ref());
@@ -218,11 +239,43 @@ impl<'a, C: Callbacks> Walker<'a, C> {
     }
 
     /// Walk a function declaration or expression node.
-    fn walk_fun(&mut self, fun: &Fun) -> () {
+    fn walk_fun<Id>(&mut self, fun: &Fun<Id>) -> () {
         self.callbacks.pre_fun(fun);
-        for item in &fun.body {
+        for item in &fun.body.items {
             self.walk_stmt_item(item);
         }
         self.callbacks.post_fun(fun);
+    }
+
+    fn walk_patt<T>(&mut self, _target: &Patt<T>) -> () {
+        // ignore for now
+    }
+
+    fn walk_assign_target(&mut self, target: &AssignTarget) -> () {
+        match *target {
+            AssignTarget::Id(_) => (),
+            AssignTarget::Dot(_, ref object, ref _property) => self.walk_expr(object.as_ref()),
+            AssignTarget::Brack(_, ref object, ref property) => {
+                self.walk_expr(object.as_ref());
+                self.walk_expr(property.as_ref());
+            },
+        }
+    }
+
+    fn walk_prop(&mut self, prop: &Prop) -> () {
+        match *prop {
+            Prop::Regular(_, ref key, ref val) => {
+                match *val {
+                    PropVal::Init(ref value) => self.walk_expr(value),
+                    PropVal::Get(_, ref body) | PropVal::Set(_, _, ref body) => {
+                        for item in &body.items {
+                            self.walk_stmt_item(item);
+                        }
+                    },
+                }
+            },
+            Prop::Method(ref fun) => self.walk_fun(fun),
+            Prop::Shorthand(ref id) => (),
+        }
     }
 }

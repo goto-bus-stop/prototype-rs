@@ -38,14 +38,19 @@ impl fmt::Display for ParseError {
             EspritError::DuplicateDefault(ref token) | EspritError::StrictWith(ref token) |
             EspritError::ThrowArgument(ref token) | EspritError::OrphanTry(ref token) =>
                 Some(token.location),
-            EspritError::TopLevelReturn(ref span) | EspritError::ForOfLetExpr(ref span) =>
+            EspritError::TopLevelReturn(ref span) | EspritError::ForOfLetExpr(ref span) |
+            EspritError::ContextualKeyword(ref span, _) | EspritError::IllegalStrictBinding(ref span, _) =>
                 Some(*span),
-            EspritError::InvalidLabel(ref id) | EspritError::InvalidLabelType(ref id) |
-            EspritError::ContextualKeyword(ref id) | EspritError::IllegalStrictBinding(ref id) =>
+            EspritError::InvalidLabel(ref id) | EspritError::InvalidLabelType(ref id) =>
                 id.location,
             EspritError::LexError(_) => None,
             EspritError::InvalidLHS(span, _) => span,
             EspritError::UnsupportedFeature(_) => None,
+            EspritError::UnexpectedDirective(span, _) => span,
+            EspritError::UnexpectedModule(span) => span,
+            EspritError::ImportInScript(ref _import) => None, // For now
+            EspritError::ExportInScript(ref _export) => None, // For now
+            EspritError::CompoundParamWithUseStrict(ref _patt) => None, // For now
         };
         write!(f, "Parse error in {}:{}\n{}", path_to_string(&self.filename), match position {
             Some(span) => format!("{}:{}", span.start.line, span.start.column),
@@ -56,25 +61,10 @@ impl fmt::Display for ParseError {
 
 impl StdError for ParseError {
     fn description(&self) -> &str {
-        match self.inner {
-            EspritError::UnexpectedToken(_) => "Unexpected token",
-            EspritError::FailedASI(_) => "Failed ASI",
-            EspritError::LexError(_) => "Lex error",
-            EspritError::TopLevelReturn(_) => "Top-level return",
-            EspritError::IllegalBreak(_) => "Illegal break",
-            EspritError::IllegalContinue(_) => "Illegal continue",
-            EspritError::InvalidLabel(_) => "Invalid label",
-            EspritError::InvalidLabelType(_) => "Invalid label type",
-            EspritError::ContextualKeyword(_) => "Contextual keyboard",
-            EspritError::IllegalStrictBinding(_) => "Illegal strict binding",
-            EspritError::ForOfLetExpr(_) => "`for of` let expr",
-            EspritError::DuplicateDefault(_) => "Duplicate default",
-            EspritError::StrictWith(_) => "Strict with",
-            EspritError::ThrowArgument(_) => "Throw argument",
-            EspritError::OrphanTry(_) => "Orphan try",
-            EspritError::InvalidLHS(_, _) => "Invalid LHS",
-            EspritError::UnsupportedFeature(_) => "Unsupported feature",
-        }
+        self.inner.description()
+    }
+    fn cause(&self) -> Option<&StdError> {
+        Some(&self.inner)
     }
 }
 
@@ -160,7 +150,7 @@ impl Deps {
         let mut map = Dependencies::new();
         for dep_id in dependencies {
             // TODO include core module shims
-            if !is_core_module(&dep_id) {
+            if !is_core_module(&dep_id) && dep_id != "perf_hooks" {
                 let path = resolver.resolve(&dep_id)?;
                 map.insert(dep_id, path);
             }
