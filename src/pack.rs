@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::rc::Rc;
 use serde_json;
@@ -28,7 +29,14 @@ impl<'a> Pack<'a> {
                 "{id}:[function(require,exports,module){{\n{source}\n}},{deps}]",
                 id = serde_json::to_string(&path_to_string(&record.path)).unwrap(),
                 source = record.source,
-                deps = serde_json::to_string(&record.dependencies).unwrap(),
+                deps = serde_json::to_string(
+                    &record.dependencies.iter()
+                        .map(|(key, val)| (key, match val.resolved {
+                             Some(ref path) => path.to_string_lossy().into_owned(),
+                             None => "".into(),
+                         }))
+                        .collect::<BTreeMap<&String, String>>()
+                ).unwrap(),
             ));
             first = false;
 

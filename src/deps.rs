@@ -9,7 +9,7 @@ use esprit::script;
 use esprit::error::Error as EspritError;
 use node_resolve::{Resolver, is_core_module};
 use estree_detect_requires::detect;
-use graph::{ModuleMap, Hash, Dependencies, ModuleRecord};
+use graph::{ModuleMap, Hash, Dependency, Dependencies, ModuleRecord};
 use serde_json;
 use sha1::{Sha1, Digest};
 use quicli::prelude::Result; // TODO use `failure`?
@@ -70,6 +70,7 @@ impl StdError for ParseError {
 
 /// Builds a dependency tree for Node modules.
 pub struct Deps {
+    module_id: u32,
     resolver: Resolver,
     module_map: ModuleMap,
 }
@@ -80,8 +81,9 @@ impl Deps {
         let resolver = Resolver::new()
             .with_extensions(vec![".js", ".json"]);
         let module_map = ModuleMap::new();
+        let module_id = 0;
 
-        Deps { resolver, module_map }
+        Deps { resolver, module_map, module_id }
     }
 
     /// Use a different resolver.
@@ -114,6 +116,7 @@ impl Deps {
     }
 
     fn read_file(&mut self, path: PathBuf, is_entry: bool) -> Result<ModuleRecord> {
+        self.module_id += 1;
         let file = File::open(&path)?;
         let mut reader = BufReader::new(file);
         let mut source = String::new();
@@ -139,6 +142,7 @@ impl Deps {
         Ok(ModuleRecord {
             path: box_path,
             source,
+            id: self.module_id,
             hash: hash as Hash,
             entry: is_entry,
             dependencies: self.resolve_deps(basedir, dependencies)?,
@@ -152,7 +156,7 @@ impl Deps {
             // TODO include core module shims
             if !is_core_module(&dep_id) && dep_id != "perf_hooks" {
                 let path = resolver.resolve(&dep_id)?;
-                map.insert(dep_id, path);
+                map.insert(dep_id.clone(), Dependency::resolved(dep_id, path));
             }
         }
         Ok(map)
@@ -160,12 +164,14 @@ impl Deps {
 
     fn read_deps(&mut self, rec_path: &str) -> Result<()> {
         let record = { &self.module_map[rec_path].to_owned() };
-        for path in record.dependencies.values() {
-            if !self.module_map.contains_key(&path_to_string(path)) {
-                let new_record = self.read_file(path.clone(), false)?;
-                let new_path = path_to_string(&new_record.path);
-                self.add_module(&new_path, new_record);
-                self.read_deps(&new_path)?;
+        for dependency in record.dependencies.values() {
+            if let Some(ref resolved) = dependency.resolved {
+                if !self.module_map.contains_key(&path_to_string(resolved)) {
+                    let new_record = self.read_file(resolved.clone(), false)?;
+                    let new_path = path_to_string(&new_record.path);
+                    self.add_module(&new_path, new_record);
+                    self.read_deps(&new_path)?;
+                }
             }
         }
         Ok(())
