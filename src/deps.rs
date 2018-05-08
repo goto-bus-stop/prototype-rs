@@ -9,8 +9,9 @@ use esprit::script;
 use esprit::error::Error as EspritError;
 use node_resolve::{Resolver, is_core_module};
 use estree_detect_requires::detect;
-use graph::{ModuleMap, Dependencies, ModuleRecord};
+use graph::{ModuleMap, Hash, Dependencies, ModuleRecord};
 use serde_json;
+use sha1::{Sha1, Digest};
 use quicli::prelude::Result; // TODO use `failure`?
 
 pub struct Deps {
@@ -122,11 +123,14 @@ impl Deps {
             source = format!("module.exports = {}", source);
         }
 
+        let hash = Sha1::digest_str(&source);
+
         let box_path = path.into_boxed_path();
         let basedir = box_path.parent().unwrap().to_path_buf();
         Ok(ModuleRecord {
             path: box_path,
             source,
+            hash: hash as Hash,
             entry: is_entry,
             dependencies: self.resolve_deps(basedir, dependencies)?,
         })

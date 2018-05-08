@@ -1,6 +1,7 @@
 use std::path::Path;
+use std::rc::Rc;
 use serde_json;
-use graph::ModuleMap;
+use graph::{ModuleMap, ModuleRecord};
 
 /// Pack a `ModuleMap` into a browserify-style javascript bundle.
 pub struct Pack<'a> {
@@ -19,7 +20,9 @@ impl<'a> Pack<'a> {
 
         let mut first = true;
         let mut entries = vec![];
-        for record in self.modules.values() {
+        let mut modules: Vec<&Rc<ModuleRecord>> = self.modules.values().collect();
+        modules.sort_unstable_by(|a, b| a.hash_cmp(b));
+        for record in modules {
             if !first { string.push_str(",\n"); }
             string.push_str(&format!(
                 "{id}:[function(require,exports,module){{\n{source}\n}},{deps}]",
