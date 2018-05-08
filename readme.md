@@ -4,8 +4,6 @@ A basic JS bundler in Rust, using [esprit](https://github.com/dherman/esprit) an
 
 It's a bit similar to browserify but without all the features. It doesn't include shims for Node builtins or whatever.
 
-Output is probably different every time because it's just outputting it in the order of the HashMap used internally. Don't worry about it!
-
 ## Install
 
 ```bash

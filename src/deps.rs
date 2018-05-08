@@ -14,11 +14,6 @@ use serde_json;
 use sha1::{Sha1, Digest};
 use quicli::prelude::Result; // TODO use `failure`?
 
-pub struct Deps {
-    resolver: Resolver,
-    module_map: ModuleMap,
-}
-
 #[derive(Debug)]
 struct ParseError {
     filename: PathBuf,
@@ -83,7 +78,14 @@ impl StdError for ParseError {
     }
 }
 
+/// Builds a dependency tree for Node modules.
+pub struct Deps {
+    resolver: Resolver,
+    module_map: ModuleMap,
+}
+
 impl Deps {
+    /// Create a new dependency tree.
     pub fn new() -> Deps {
         let resolver = Resolver::new()
             .with_extensions(vec![".js", ".json"]);
@@ -92,6 +94,23 @@ impl Deps {
         Deps { resolver, module_map }
     }
 
+    /// Use a different resolver.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use node_resolve::Resolver;
+    /// use deps::Deps;
+    ///
+    /// let deps = Deps::new()
+    ///     .with_resolver(Resolver::new().preserve_symlinks(false));
+    /// ```
+    pub fn with_resolver(mut self, resolver: Resolver) -> Self {
+        self.resolver = resolver;
+        self
+    }
+
+    /// Start dependency resolution at an entry file.
     pub fn run(&mut self, entry: &str) -> Result<()> {
         let resolved = self.resolver.with_basedir(PathBuf::from("."))
             .resolve(entry)?;
