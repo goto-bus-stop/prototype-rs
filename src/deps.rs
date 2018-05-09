@@ -5,6 +5,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 use std::fmt;
 use std::error::Error as StdError;
+use std::collections::HashSet;
 use esprit::script;
 use esprit::error::Error as EspritError;
 use node_resolve::{Resolver, is_core_module};
@@ -72,6 +73,7 @@ impl StdError for ParseError {
 pub struct Deps {
     module_id: u32,
     resolver: Resolver,
+    loaded_files: HashSet<PathBuf>,
     module_map: ModuleMap,
 }
 
@@ -82,8 +84,14 @@ impl Deps {
             .with_extensions(vec![".js", ".json"]);
         let module_map = ModuleMap::new();
         let module_id = 0;
+        let loaded_files = HashSet::new();
 
-        Deps { resolver, module_map, module_id }
+        Deps {
+            resolver,
+            module_map,
+            module_id,
+            loaded_files,
+        }
     }
 
     /// Use a different resolver.
@@ -107,11 +115,11 @@ impl Deps {
         let resolved = self.resolver.with_basedir(PathBuf::from("."))
             .resolve(entry)?;
 
-        let record = self.read_file(resolved, true)?;
+        let mut record = self.read_file(resolved, true)?;
         let rec_path = path_to_string(&record.path);
+        self.loaded_files.insert(record.path.to_path_buf());
+        self.read_deps(&mut record)?;
         self.add_module(&rec_path, record);
-
-        self.read_deps(&rec_path)?;
         Ok(())
     }
 
@@ -162,17 +170,22 @@ impl Deps {
         Ok(map)
     }
 
-    fn read_deps(&mut self, rec_path: &str) -> Result<()> {
-        let record = { &self.module_map[rec_path].to_owned() };
-        for dependency in record.dependencies.values() {
-            if let Some(ref resolved) = dependency.resolved {
-                if !self.module_map.contains_key(&path_to_string(resolved)) {
-                    let new_record = self.read_file(resolved.clone(), false)?;
+    fn read_deps(&mut self, record: &mut ModuleRecord) -> Result<()> {
+        for dependency in record.dependencies.values_mut() {
+            let dep_record = if let Some(ref resolved) = dependency.resolved {
+                if !self.loaded_files.contains(resolved) {
+                    let mut new_record = self.read_file(resolved.clone(), false)?;
                     let new_path = path_to_string(&new_record.path);
+                    self.loaded_files.insert(new_record.path.to_path_buf());
+                    self.read_deps(&mut new_record)?;
                     self.add_module(&new_path, new_record);
-                    self.read_deps(&new_path)?;
                 }
-            }
+                Some(self.module_map[&path_to_string(resolved)].to_owned())
+            } else {
+                None
+            };
+
+            dep_record.map(|d| dependency.set_record(&d));
         }
         Ok(())
     }

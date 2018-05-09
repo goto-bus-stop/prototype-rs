@@ -27,21 +27,21 @@ impl<'a> Pack<'a> {
             if !first { string.push_str(",\n"); }
             string.push_str(&format!(
                 "{id}:[function(require,exports,module){{\n{source}\n}},{deps}]",
-                id = serde_json::to_string(&path_to_string(&record.path)).unwrap(),
+                id = serde_json::to_string(&record.id).unwrap(),
                 source = record.source,
                 deps = serde_json::to_string(
                     &record.dependencies.iter()
-                        .map(|(key, val)| (key, match val.resolved {
-                             Some(ref path) => path.to_string_lossy().into_owned(),
-                             None => "".into(),
+                        .map(|(key, val)| (key, match val.record {
+                             Some(ref rec) => rec.id,
+                             None => 0,
                          }))
-                        .collect::<BTreeMap<&String, String>>()
+                        .collect::<BTreeMap<&String, u32>>()
                 ).unwrap(),
             ));
             first = false;
 
             if record.entry {
-                entries.push(path_to_string(&record.path));
+                entries.push(record.id);
             }
         }
 
@@ -50,8 +50,4 @@ impl<'a> Pack<'a> {
         string.push_str(");");
         string
     }
-}
-
-fn path_to_string(path: &Path) -> String {
-    path.to_string_lossy().into_owned()
 }

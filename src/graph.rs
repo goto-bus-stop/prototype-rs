@@ -48,6 +48,10 @@ impl Dependency {
         self.record = Some(Rc::clone(record));
         self
     }
+
+    pub fn set_record(&mut self, record: &Rc<ModuleRecord>) -> () {
+        self.record = Some(Rc::clone(record));
+    }
 }
 
 impl ModuleRecord {
