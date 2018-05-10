@@ -14,7 +14,6 @@ cargo run ~/path/to/entry/point.js > output.js
 
 ## TODO
 
- - [ ] bundle node builtin modules
  - [ ] insert-module-globals
  - [ ] transform
  - [ ] async
