@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::path::Path;
 use std::rc::Rc;
 use serde_json;
 use graph::{ModuleMap, ModuleRecord};

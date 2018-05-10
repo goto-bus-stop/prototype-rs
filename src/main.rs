@@ -5,6 +5,7 @@ extern crate node_resolve;
 extern crate serde_json;
 extern crate sha1;
 extern crate estree_detect_requires;
+extern crate node_core_shims;
 extern crate time;
 #[macro_use] extern crate quicli;
 
