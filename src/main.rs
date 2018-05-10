@@ -8,6 +8,7 @@ extern crate estree_detect_requires;
 extern crate time;
 #[macro_use] extern crate quicli;
 
+mod builtins;
 mod graph;
 mod deps;
 mod pack;
@@ -21,11 +22,16 @@ use pack::Pack;
 #[derive(Debug, StructOpt)]
 struct Options {
     entry: String,
+    #[structopt(long = "no-builtins", help = "Exclude shims for builtin modules. Useful when generating a bundle for Node.")]
+    no_builtins: bool,
 }
 
 main!(|args: Options| {
     let start = PreciseTime::now();
-    let mut deps = Deps::new();
+    let mut deps = Deps::new()
+        .include_builtins(!args.no_builtins)
+        .with_builtins_path("./crates/node-core-shims".into());
+
     deps.run(&args.entry)?;
     let mut out = stdout();
     let bundle = Pack::new(&deps).to_string();

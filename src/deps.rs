@@ -8,12 +8,13 @@ use std::error::Error as StdError;
 use std::collections::HashSet;
 use esprit::script;
 use esprit::error::Error as EspritError;
-use node_resolve::{Resolver, is_core_module};
+use node_resolve::Resolver;
 use estree_detect_requires::detect;
 use graph::{ModuleMap, Hash, Dependency, Dependencies, ModuleRecord};
 use serde_json;
 use sha1::{Sha1, Digest};
 use quicli::prelude::Result; // TODO use `failure`?
+use builtins::{Builtins, NodeBuiltins, NoBuiltins};
 
 #[derive(Debug)]
 struct ParseError {
@@ -75,6 +76,8 @@ pub struct Deps {
     resolver: Resolver,
     loaded_files: HashSet<PathBuf>,
     module_map: ModuleMap,
+    include_builtins: bool,
+    builtins: Box<Builtins>,
 }
 
 impl Deps {
@@ -85,12 +88,15 @@ impl Deps {
         let module_map = ModuleMap::new();
         let module_id = 0;
         let loaded_files = HashSet::new();
+        let builtins = NoBuiltins;
 
         Deps {
             resolver,
             module_map,
             module_id,
             loaded_files,
+            include_builtins: true,
+            builtins: Box::new(builtins),
         }
     }
 
@@ -107,6 +113,37 @@ impl Deps {
     /// ```
     pub fn with_resolver(mut self, resolver: Resolver) -> Self {
         self.resolver = resolver;
+        self
+    }
+
+    /// Configure the base path for Node builtin shims resolution.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use deps::Deps;
+    /// // Use builtin shims provided by the node-libs-browser package.
+    /// let deps = Deps::new()
+    ///     .with_builtins_path("./node_modules/node-libs-browser".into())
+    /// ```
+    pub fn with_builtins_path(mut self, path: PathBuf) -> Self {
+        self.builtins = Box::new(NodeBuiltins::new(path));
+        self
+    }
+
+    /// Disable bundling builtin modules.
+    pub fn no_builtins(mut self) -> Self {
+        self.builtins = Box::new(NoBuiltins);
+        self
+    }
+
+    /// Toggle inclusion of builtins.
+    /// If `false`, builtin modules will stay as external `require()` calls.
+    /// Then whatever program runs the bundle (eg. node) will provide these
+    /// modules.
+    /// If `true`, shims for builtin modules will be included in the bundle.
+    pub fn include_builtins(mut self, include: bool) -> Self {
+        self.include_builtins = include;
         self
     }
 
@@ -162,10 +199,16 @@ impl Deps {
         let mut map = Dependencies::new();
         for dep_id in dependencies {
             // TODO include core module shims
-            if !is_core_module(&dep_id) && dep_id != "perf_hooks" {
-                let path = resolver.resolve(&dep_id)?;
-                map.insert(dep_id.clone(), Dependency::resolved(dep_id, path));
-            }
+            let path = if self.builtins.is_builtin(&dep_id) {
+                if self.include_builtins {
+                    self.builtins.resolve(&resolver, &dep_id)?
+                } else {
+                    None
+                }
+            } else {
+                Some(resolver.resolve(&dep_id)?)
+            };
+            path.map(|resolved| map.insert(dep_id.clone(), Dependency::resolved(dep_id, resolved)));
         }
         Ok(map)
     }
@@ -180,7 +223,7 @@ impl Deps {
                     self.read_deps(&mut new_record)?;
                     self.add_module(&new_path, new_record);
                 }
-                Some(self.module_map[&path_to_string(resolved)].to_owned())
+                self.module_map.get(&path_to_string(resolved)).map(|rc| rc.to_owned())
             } else {
                 None
             };
