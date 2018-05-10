@@ -1,20 +1,20 @@
+use std::collections::HashSet;
+use std::error::Error as StdError;
+use std::fmt;
 use std::fs::File;
 use std::io::{Read, BufReader};
-use std::path::{Path, PathBuf};
 use std::ops::Deref;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::fmt;
-use std::error::Error as StdError;
-use std::collections::HashSet;
 use esprit::script;
 use esprit::error::Error as EspritError;
-use node_resolve::Resolver;
-use estree_detect_requires::detect;
-use graph::{ModuleMap, Hash, Dependency, Dependencies, ModuleRecord};
+use quicli::prelude::Result; // TODO use `failure`?
 use serde_json;
 use sha1::{Sha1, Digest};
-use quicli::prelude::Result; // TODO use `failure`?
+use node_resolve::Resolver;
+use estree_detect_requires::detect;
 use builtins::{Builtins, NodeBuiltins, NoBuiltins};
+use graph::{ModuleMap, Hash, Dependency, Dependencies, ModuleRecord};
 
 #[derive(Debug)]
 struct ParseError {

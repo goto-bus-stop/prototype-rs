@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use node_resolve::{Resolver, is_core_module};
-use node_core_shims::{NodeBuiltin, get_builtin_mapping};
 use quicli::prelude::Result;
+use node_core_shims::{NodeBuiltin, get_builtin_mapping};
 
 /// Map builtin module names to a resolvable module ID.
 pub trait Builtins {
