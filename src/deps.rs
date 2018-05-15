@@ -1,74 +1,12 @@
 use std::collections::HashSet;
-use std::error::Error as StdError;
-use std::fmt;
-use std::fs::File;
-use std::io::{Read, BufReader};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use esprit::script;
-use esprit::error::Error as EspritError;
 use quicli::prelude::Result; // TODO use `failure`?
-use serde_json;
-use sha1::{Sha1, Digest};
 use node_resolve::Resolver;
-use estree_detect_requires::detect;
 use builtins::{Builtins, NodeBuiltins, NoBuiltins};
-use graph::{ModuleMap, Hash, Dependency, Dependencies, ModuleRecord};
-
-#[derive(Debug)]
-struct ParseError {
-    filename: PathBuf,
-    inner: EspritError,
-}
-
-impl ParseError {
-    fn new(filename: &PathBuf, inner: EspritError) -> ParseError {
-        ParseError { filename: filename.clone(), inner }
-    }
-
-    fn into_inner(self) -> EspritError {
-        self.inner
-    }
-}
-
-impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let position = match self.inner {
-            EspritError::UnexpectedToken(ref token) | EspritError::FailedASI(ref token) |
-            EspritError::IllegalBreak(ref token) | EspritError::IllegalContinue(ref token) |
-            EspritError::DuplicateDefault(ref token) | EspritError::StrictWith(ref token) |
-            EspritError::ThrowArgument(ref token) | EspritError::OrphanTry(ref token) =>
-                Some(token.location),
-            EspritError::TopLevelReturn(ref span) | EspritError::ForOfLetExpr(ref span) |
-            EspritError::ContextualKeyword(ref span, _) | EspritError::IllegalStrictBinding(ref span, _) =>
-                Some(*span),
-            EspritError::InvalidLabel(ref id) | EspritError::InvalidLabelType(ref id) =>
-                id.location,
-            EspritError::LexError(_) => None,
-            EspritError::InvalidLHS(span, _) => span,
-            EspritError::UnsupportedFeature(_) => None,
-            EspritError::UnexpectedDirective(span, _) => span,
-            EspritError::UnexpectedModule(span) => span,
-            EspritError::ImportInScript(ref _import) => None, // For now
-            EspritError::ExportInScript(ref _export) => None, // For now
-            EspritError::CompoundParamWithUseStrict(ref _patt) => None, // For now
-        };
-        write!(f, "Parse error in {}:{}\n{}", path_to_string(&self.filename), match position {
-            Some(span) => format!("{}:{}", span.start.line, span.start.column),
-            None => "0:0".into(),
-        }, self.description())
-    }
-}
-
-impl StdError for ParseError {
-    fn description(&self) -> &str {
-        self.inner.description()
-    }
-    fn cause(&self) -> Option<&StdError> {
-        Some(&self.inner)
-    }
-}
+use graph::{ModuleMap, Dependency, Dependencies, SourceFile, ModuleRecord};
+use loader::LoadFile;
 
 /// Builds a dependency tree for Node modules.
 pub struct Deps {
@@ -152,49 +90,31 @@ impl Deps {
         let resolved = self.resolver.with_basedir(PathBuf::from("."))
             .resolve(entry)?;
 
-        let mut record = self.read_file(resolved, true)?;
-        let rec_path = path_to_string(&record.path);
-        self.loaded_files.insert(record.path.to_path_buf());
+        let source_file = LoadFile::new(resolved).run()?;
+        let mut record = self.to_record(source_file, true)?;
+        let rec_path = path_to_string(&record.file.path());
+        self.loaded_files.insert(record.file.path().clone());
         self.read_deps(&mut record)?;
         self.add_module(&rec_path, record);
         Ok(())
     }
 
-    fn read_file(&mut self, path: PathBuf, is_entry: bool) -> Result<ModuleRecord> {
+    fn to_record(&mut self, file: SourceFile, entry: bool) -> Result<ModuleRecord> {
         self.module_id += 1;
-        let file = File::open(&path)?;
-        let mut reader = BufReader::new(file);
-        let mut source = String::new();
-        reader.read_to_string(&mut source)?;
-
-        let is_json = path.extension().map_or(false, |ext| ext == "json");
-        let dependencies = if is_json {
-            vec![]
-        } else {
-            let ast = script(&source).map_err(|err| ParseError::new(&path, err))?;
-            detect(&ast)
+        let basedir = file.path().clone().parent().unwrap().to_path_buf();
+        let dependencies = match file {
+            SourceFile::CJS { ref dependencies, .. } => self.resolve_deps(basedir, dependencies)?,
+            _ => Dependencies::new(),
         };
-
-        if is_json {
-            let _value: serde_json::Value = serde_json::from_str(&source)?; // Check syntax
-            source = format!("module.exports = {}", source);
-        }
-
-        let hash = Sha1::digest_str(&source);
-
-        let box_path = path.into_boxed_path();
-        let basedir = box_path.parent().unwrap().to_path_buf();
         Ok(ModuleRecord {
-            path: box_path,
-            source,
             id: self.module_id,
-            hash: hash as Hash,
-            entry: is_entry,
-            dependencies: self.resolve_deps(basedir, dependencies)?,
+            file,
+            entry,
+            dependencies,
         })
     }
 
-    fn resolve_deps(&mut self, basedir: PathBuf, dependencies: Vec<String>) -> Result<Dependencies> {
+    fn resolve_deps(&mut self, basedir: PathBuf, dependencies: &Vec<String>) -> Result<Dependencies> {
         let resolver = self.resolver.with_basedir(basedir);
         let mut map = Dependencies::new();
         for dep_id in dependencies {
@@ -208,7 +128,7 @@ impl Deps {
             } else {
                 Some(resolver.resolve(&dep_id)?)
             };
-            path.map(|resolved| map.insert(dep_id.clone(), Dependency::resolved(dep_id, resolved)));
+            path.map(|resolved| map.insert(dep_id.clone(), Dependency::resolved(dep_id.clone(), resolved)));
         }
         Ok(map)
     }
@@ -217,9 +137,10 @@ impl Deps {
         for dependency in record.dependencies.values_mut() {
             let dep_record = if let Some(ref resolved) = dependency.resolved {
                 if !self.loaded_files.contains(resolved) {
-                    let mut new_record = self.read_file(resolved.clone(), false)?;
-                    let new_path = path_to_string(&new_record.path);
-                    self.loaded_files.insert(new_record.path.to_path_buf());
+                    let source_file = LoadFile::new(resolved.clone()).run()?;
+                    let mut new_record = self.to_record(source_file, true)?;
+                    let new_path = path_to_string(&new_record.file.path());
+                    self.loaded_files.insert(new_record.file.path().to_path_buf());
                     self.read_deps(&mut new_record)?;
                     self.add_module(&new_path, new_record);
                 }

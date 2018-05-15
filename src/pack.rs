@@ -27,7 +27,7 @@ impl<'a> Pack<'a> {
             string.push_str(&format!(
                 "{id}:[function(require,exports,module){{\n{source}\n}},{deps}]",
                 id = serde_json::to_string(&record.id).unwrap(),
-                source = record.source,
+                source = record.file.source(),
                 deps = serde_json::to_string(
                     &record.dependencies.iter()
                         .map(|(key, val)| (key, match val.record {

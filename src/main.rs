@@ -10,8 +10,9 @@ extern crate time;
 #[macro_use] extern crate quicli;
 
 mod builtins;
-mod graph;
 mod deps;
+mod graph;
+mod loader;
 mod pack;
 
 use std::io::{Write, stdout};

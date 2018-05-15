@@ -1,22 +1,77 @@
 use std::cmp::Ordering;
 use std::collections::{HashMap, BTreeMap};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::rc::Rc;
 use digest::generic_array::GenericArray;
 use digest::generic_array::typenum::U20;
+use easter::stmt::Script;
+use serde_json::Value;
 
 /// Map dependency IDs used inside require() to their full paths.
 pub type Dependencies = BTreeMap<String, Dependency>;
 pub type Hash = GenericArray<u8, U20>;
 
+/// A source file.
+#[derive(Debug)]
+pub enum SourceFile {
+    CJS {
+        /// Path to the file.
+        path: PathBuf,
+        /// The file source content.
+        source: String,
+        /// Hash of the source content.
+        hash: Hash,
+        /// Syntax tree.
+        ast: Script,
+        /// Dependencies.
+        dependencies: Vec<String>,
+    },
+    /// A JSON source file on disk.
+    JSON {
+        /// Path to the file.
+        path: PathBuf,
+        /// The file source content.
+        source: String,
+        /// Hash of the source content.
+        hash: Hash,
+        /// The JSON object.
+        value: Value,
+    },
+}
+
+// TODO There's probably a way to do this with a macro
+impl SourceFile {
+    pub fn path(&self) -> &PathBuf {
+        match *self {
+            SourceFile::CJS { ref path, .. } => path,
+            SourceFile::JSON { ref path, .. } => path,
+        }
+    }
+
+    pub fn source(&self) -> &String {
+        match *self {
+            SourceFile::CJS { ref source, .. } => source,
+            SourceFile::JSON { ref source, .. } => source,
+        }
+    }
+
+    pub fn hash(&self) -> &Hash {
+        match *self {
+            SourceFile::CJS { ref hash, .. } => hash,
+            SourceFile::JSON { ref hash, .. } => hash,
+        }
+    }
+}
+
 /// A Module.
 #[derive(Debug)]
 pub struct ModuleRecord {
-    pub path: Box<Path>,
+    pub file: SourceFile,
+    /// A unique ID for this module.
     pub id: u32,
-    pub source: String,
-    pub hash: Hash,
+    /// Whether this module is an entry point to the graph.
     pub entry: bool,
+    /// Map of dependency names to ModuleRecords.
     pub dependencies: Dependencies,
 }
 
@@ -45,7 +100,7 @@ impl Dependency {
     }
 
     pub fn with_record(mut self, record: &Rc<ModuleRecord>) -> Self {
-        self.record = Some(Rc::clone(record));
+        self.set_record(record);
         self
     }
 
@@ -56,8 +111,8 @@ impl Dependency {
 
 impl ModuleRecord {
     pub fn hash_cmp(&self, other: &Self) -> Ordering {
-        for i in 0..self.hash.len() {
-            let order = self.hash[i].cmp(&other.hash[i]);
+        for i in 0..self.file.hash().len() {
+            let order = self.file.hash()[i].cmp(&other.file.hash()[i]);
             if order != Ordering::Equal {
                 return order
             }
