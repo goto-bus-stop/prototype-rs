@@ -65,20 +65,46 @@ impl StdError for ParseError {
     }
 }
 
+trait Transform {
+    fn transform(&self, file: SourceFile) -> Result<SourceFile>;
+}
+
+/// Transform JSON files into CommonJS modules.
+struct JSONTransform;
+impl Transform for JSONTransform {
+    fn transform(&self, file: SourceFile) -> Result<SourceFile> {
+        match file {
+            SourceFile::CJS { .. } => Ok(file),
+            SourceFile::JSON { path, source, hash, .. } => Ok(SourceFile::CJS {
+                path,
+                source: format!("module.exports = {}", &source),
+                hash,
+                ast: None,
+                dependencies: vec![],
+            }),
+        }
+    }
+}
+
 pub struct LoadFile {
     path: PathBuf,
+    transforms: Vec<Box<Transform>>,
 }
 
 impl LoadFile {
     pub fn new(path: PathBuf) -> Self {
-        LoadFile { path }
+        LoadFile {
+            path,
+            transforms: vec![Box::new(JSONTransform)],
+        }
     }
 
-    pub fn run(self) -> Result<SourceFile> {
+    pub fn run(&self) -> Result<SourceFile> {
         self.read_file()
+            .and_then(|file| self.transform(file))
     }
 
-    fn read_file(self) -> Result<SourceFile> {
+    fn read_file(&self) -> Result<SourceFile> {
         let file = File::open(&self.path)?;
         let mut reader = BufReader::new(file);
         let mut source = String::new();
@@ -90,7 +116,7 @@ impl LoadFile {
         if is_json {
             let value = serde_json::from_str(&source)?;
             Ok(SourceFile::JSON {
-                path: self.path,
+                path: self.path.clone(),
                 source,
                 hash,
                 value,
@@ -100,12 +126,19 @@ impl LoadFile {
                 .map_err(|e| ParseError::new(&self.path, e))?;
             let dependencies = detect(&ast);
             Ok(SourceFile::CJS {
-                path: self.path,
+                path: self.path.clone(),
                 source,
                 hash,
-                ast,
+                ast: Some(ast),
                 dependencies,
             })
         }
+    }
+
+    fn transform(&self, file: SourceFile) -> Result<SourceFile> {
+        self.transforms.iter()
+            .fold(Ok(file), |res, transform| {
+                res.and_then(|file| transform.transform(file))
+            })
     }
 }

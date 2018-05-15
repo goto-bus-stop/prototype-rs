@@ -22,7 +22,7 @@ pub enum SourceFile {
         /// Hash of the source content.
         hash: Hash,
         /// Syntax tree.
-        ast: Script,
+        ast: Option<Script>,
         /// Dependencies.
         dependencies: Vec<String>,
     },
