@@ -4,6 +4,8 @@ A basic JS bundler in Rust, using [esprit](https://github.com/dherman/esprit) an
 
 It's a bit similar to browserify but without all the features.
 
+This is a learning project for me so there will be breaking changes with every commit probably as I figure things out!
+
 ## Install
 
 ```bash
