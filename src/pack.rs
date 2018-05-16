@@ -31,10 +31,10 @@ impl<'a> Pack<'a> {
                 deps = serde_json::to_string(
                     &record.dependencies.iter()
                         .map(|(key, val)| (key, match val.record {
-                             Some(ref rec) => rec.id,
-                             None => 0,
+                             Some(ref rec) => Some(rec.id),
+                             None => None,
                          }))
-                        .collect::<BTreeMap<&String, u32>>()
+                        .collect::<BTreeMap<&String, Option<u32>>>()
                 ).unwrap(),
             ));
             first = false;
