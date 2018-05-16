@@ -75,6 +75,20 @@ pub struct ModuleRecord {
     pub dependencies: Dependencies,
 }
 
+impl ModuleRecord {
+    pub fn hash_cmp(&self, other: &Self) -> Ordering {
+        let self_hash = self.file.hash();
+        let other_hash = other.file.hash();
+        for i in 0..self_hash.len() {
+            let order = self_hash[i].cmp(&other_hash[i]);
+            if order != Ordering::Equal {
+                return order
+            }
+        }
+        Ordering::Equal
+    }
+}
+
 #[derive(Debug)]
 pub struct Dependency {
     pub name: String,
@@ -106,18 +120,6 @@ impl Dependency {
 
     pub fn set_record(&mut self, record: &Rc<ModuleRecord>) -> () {
         self.record = Some(Rc::clone(record));
-    }
-}
-
-impl ModuleRecord {
-    pub fn hash_cmp(&self, other: &Self) -> Ordering {
-        for i in 0..self.file.hash().len() {
-            let order = self.file.hash()[i].cmp(&other.file.hash()[i]);
-            if order != Ordering::Equal {
-                return order
-            }
-        }
-        Ordering::Equal
     }
 }
 
