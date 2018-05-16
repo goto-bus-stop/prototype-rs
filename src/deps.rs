@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use quicli::prelude::Result; // TODO use `failure`?
+use quicli::prelude::*; // TODO use `failure`?
 use node_resolve::Resolver;
 use builtins::{Builtins, NodeBuiltins, NoBuiltins};
 use graph::{ModuleMap, Dependency, Dependencies, SourceFile, ModuleRecord};
@@ -149,6 +149,9 @@ impl Deps {
                 None
             };
 
+            if dep_record.is_none() {
+                warn!("Could not resolve ModuleRecord for {} from {}", dependency.name, record.file.path().to_string_lossy());
+            }
             dep_record.map(|d| dependency.set_record(&d));
         }
         Ok(())
