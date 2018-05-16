@@ -36,9 +36,10 @@ main!(|args: Options| {
 
     deps.run(&args.entry)?;
     let mut out = stdout();
+    let num_modules = deps.len();
     let bundle = Pack::new(&deps).to_string();
     let size = bundle.len();
     out.write_all(bundle.as_bytes())?;
     let end = PreciseTime::now();
-    eprint!("wrote {} bytes, took {}ms\n", size, start.to(end).num_milliseconds());
+    eprint!("wrote {} bytes containing {} modules, took {}ms\n", size, num_modules, start.to(end).num_milliseconds());
 });
