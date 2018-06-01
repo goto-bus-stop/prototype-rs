@@ -22,7 +22,7 @@ impl Deps {
     /// Create a new dependency tree.
     pub fn new() -> Deps {
         let resolver = Resolver::new()
-            .with_extensions(vec![".js", ".json"]);
+            .with_extensions(&[".js", ".json"]);
         let module_map = ModuleMap::new();
         let module_id = 0;
         let loaded_files = HashSet::new();
